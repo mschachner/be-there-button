@@ -1,0 +1,15 @@
+{
+  "name": "be-there-button",
+  "version": "1.0.0",
+  "description": "Single-page app with a global 'Be There' button and lightweight backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ioredis": "^5.7.0"
+  }
+}
