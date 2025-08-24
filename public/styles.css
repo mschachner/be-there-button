@@ -45,6 +45,7 @@ body {
   cursor: pointer;
   transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
 }
+.be-there:disabled { cursor: pointer; }
 .be-there:hover { filter: saturate(1.1); }
 .be-there:active {
   transform: translateY(2px) scale(0.98);

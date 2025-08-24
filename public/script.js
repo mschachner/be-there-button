@@ -6,8 +6,10 @@
   const adminLink = document.getElementById('admin-link');
 
   const CLICK_COOKIE = 'be-there-clicked';
+  let currentCount = 0;
 
   function updateCountText(n) {
+    currentCount = n;
     const people = n === 1 ? 'person' : 'people';
     countEl.textContent = `${n} ${people} will be there.`;
   }
@@ -17,12 +19,10 @@
       statusEl.textContent = 'You have clicked the Be There Button. Please do not click the button again...';
       buttonEl.setAttribute('disabled', 'true');
       buttonEl.style.filter = 'grayscale(0.2)';
-      buttonEl.style.cursor = 'not-allowed';
     } else {
       statusEl.textContent = 'You have not clicked the Be There Button.';
       buttonEl.removeAttribute('disabled');
       buttonEl.style.filter = '';
-      buttonEl.style.cursor = 'pointer';
     }
   }
 
@@ -52,20 +52,23 @@
 
   buttonEl.addEventListener('click', async () => {
     if (buttonEl.hasAttribute('disabled')) return; // guard double-clicks
+    const prev = currentCount;
     setStatusClicked(true);
+    updateCountText(prev + 1);
     try {
       const { count } = await incrementCount();
       updateCountText(count);
     } catch (err) {
       statusEl.textContent = 'Error submitting. Please try again.';
       setStatusClicked(false);
+      updateCountText(prev);
     }
   });
 
   adminLink.addEventListener('click', async (e) => {
     e.preventDefault();
     const password = prompt('Enter admin password:');
-    if (password !== 'admin') return;
+    if (!password) return;
     const newText = prompt('Event Text:', eventTextEl.textContent);
     const reset = confirm('Reset count?');
     try {
@@ -74,6 +77,10 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password, eventText: newText, resetCount: reset })
       });
+      if (res.status === 401) {
+        alert('Invalid password');
+        return;
+      }
       if (!res.ok) throw new Error('Failed');
       const data = await res.json();
       updateCountText(data.count ?? 0);
