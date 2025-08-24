@@ -9,6 +9,7 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const REDIS_URL = process.env.REDIS_URL;
 const REDIS_KEY = process.env.REDIS_KEY || 'be-there:count';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
+const CLICK_COOKIE = 'be-there-clicked';
 
 const redis = (REDIS_URL && RedisLib)
   ? new RedisLib(REDIS_URL, {
@@ -98,6 +99,15 @@ function setEventText(text) {
   return text;
 }
 
+function parseCookies(req) {
+  const header = req.headers.cookie || '';
+  return header.split(';').reduce((acc, pair) => {
+    const [k, v] = pair.trim().split('=');
+    if (k) acc[k] = decodeURIComponent(v || '');
+    return acc;
+  }, {});
+}
+
 function serveStatic(req, res) {
   let filePath = req.url === '/' ? path.join(PUBLIC_DIR, 'index.html') : path.join(PUBLIC_DIR, req.url);
   if (!filePath.startsWith(PUBLIC_DIR)) {
@@ -120,12 +130,15 @@ function serveStatic(req, res) {
 
 const server = http.createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/api/state') {
-    Promise.all([readCount()])
-      .then(([count]) => {
+    const cookies = parseCookies(req);
+    const clicked = cookies[CLICK_COOKIE] === 'true';
+    readCount()
+      .then((count) => {
         const eventText = getEventText();
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-        res.end(JSON.stringify({ count, eventText }));
-      }).catch(() => {
+        res.end(JSON.stringify({ count, eventText, clicked }));
+      })
+      .catch(() => {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Failed to read state' }));
       });
@@ -144,16 +157,30 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.method === 'POST' && req.url === '/api/increment') {
+    const cookies = parseCookies(req);
+    const alreadyClicked = cookies[CLICK_COOKIE] === 'true';
     let body = '';
     req.on('data', chunk => (body += chunk));
     req.on('end', () => {
-      incrementCount().then(count => {
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-        res.end(JSON.stringify({ count }));
-      }).catch(() => {
+      const finish = (count, setCookie) => {
+        const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
+        if (setCookie) {
+          headers['Set-Cookie'] = `${CLICK_COOKIE}=true; Path=/; Max-Age=31536000`;
+        }
+        res.writeHead(200, headers);
+        res.end(JSON.stringify({ count, clicked: true }));
+      };
+
+      const handleError = () => {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Failed to increment' }));
-      });
+      };
+
+      if (alreadyClicked) {
+        readCount().then((count) => finish(count, false)).catch(handleError);
+      } else {
+        incrementCount().then((count) => finish(count, true)).catch(handleError);
+      }
     });
     return;
   }
