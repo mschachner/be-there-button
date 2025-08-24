@@ -10,11 +10,28 @@
     <main class="container">
       <h1 class="title">The Be There Button</h1>
       <div id="event-text" class="event-text">Event Text</div>
-      <button id="be-there" class="be-there" aria-label="Be There"></button>
+      <button id="be-there" class="be-there" aria-label="Be There">Be There</button>
       <div id="count" class="count">0 people will be there.</div>
       <div id="status" class="status">You have not clicked the Be There Button.</div>
     </main>
     <a id="admin-link" class="admin-link" href="#">admin</a>
+    <dialog id="admin-dialog" class="admin-dialog">
+      <form id="admin-form" method="dialog">
+        <label> Password
+          <input type="password" id="admin-password" required />
+        </label>
+        <label> Event Text
+          <input type="text" id="admin-event-text" />
+        </label>
+        <label class="reset">
+          <input type="checkbox" id="admin-reset" /> Reset count
+        </label>
+        <menu>
+          <button type="button" id="admin-cancel">Cancel</button>
+          <button type="submit" id="admin-submit">Save</button>
+        </menu>
+      </form>
+    </dialog>
     <script src="/script.js"></script>
   </body>
   </html>
