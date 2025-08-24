@@ -8,20 +8,25 @@ const DATA_FILE = path.join(__dirname, 'data.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const REDIS_URL = process.env.REDIS_URL;
 const REDIS_KEY = process.env.REDIS_KEY || 'be-there:count';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 
 const redis = (REDIS_URL && RedisLib) ? new RedisLib(REDIS_URL, { lazyConnect: false }) : null;
 
-function readCountFile() {
+function readDataFile() {
   try {
     const raw = fs.readFileSync(DATA_FILE, 'utf8');
     const parsed = JSON.parse(raw);
-    if (typeof parsed.count === 'number' && parsed.count >= 0) return parsed.count;
-  } catch (_err) {}
-  return 0;
+    return {
+      count: typeof parsed.count === 'number' && parsed.count >= 0 ? parsed.count : 0,
+      eventText: typeof parsed.eventText === 'string' ? parsed.eventText : 'Event Text'
+    };
+  } catch (_err) {
+    return { count: 0, eventText: 'Event Text' };
+  }
 }
 
-function writeCountFile(count) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify({ count }), 'utf8');
+function writeDataFile(data) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data), 'utf8');
 }
 
 async function readCount() {
@@ -31,10 +36,10 @@ async function readCount() {
       const asNumber = Number.parseInt(value ?? '0', 10);
       return Number.isFinite(asNumber) ? asNumber : 0;
     } catch (_err) {
-      return readCountFile();
+      return readDataFile().count;
     }
   }
-  return readCountFile();
+  return readDataFile().count;
 }
 
 async function incrementCount() {
@@ -43,14 +48,39 @@ async function incrementCount() {
       const newValue = await redis.incr(REDIS_KEY);
       return newValue;
     } catch (_err) {
-      const c = readCountFile() + 1;
-      writeCountFile(c);
+      const data = readDataFile();
+      const c = data.count + 1;
+      writeDataFile({ ...data, count: c });
       return c;
     }
   }
-  const c = readCountFile() + 1;
-  writeCountFile(c);
+  const data = readDataFile();
+  const c = data.count + 1;
+  writeDataFile({ ...data, count: c });
   return c;
+}
+
+async function resetCount() {
+  if (redis) {
+    try {
+      await redis.set(REDIS_KEY, '0');
+    } catch (_err) {}
+  }
+  const data = readDataFile();
+  const updated = { ...data, count: 0 };
+  writeDataFile(updated);
+  return 0;
+}
+
+function getEventText() {
+  return readDataFile().eventText;
+}
+
+function setEventText(text) {
+  const data = readDataFile();
+  const updated = { ...data, eventText: text };
+  writeDataFile(updated);
+  return text;
 }
 
 function serveStatic(req, res) {
@@ -74,6 +104,19 @@ function serveStatic(req, res) {
 }
 
 const server = http.createServer((req, res) => {
+  if (req.method === 'GET' && req.url === '/api/state') {
+    Promise.all([readCount()])
+      .then(([count]) => {
+        const eventText = getEventText();
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ count, eventText }));
+      }).catch(() => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Failed to read state' }));
+      });
+    return;
+  }
+
   if (req.method === 'GET' && req.url === '/api/count') {
     readCount().then(count => {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -100,6 +143,37 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && req.url === '/api/admin') {
+    let body = '';
+    req.on('data', chunk => (body += chunk));
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body || '{}');
+        if (data.password !== ADMIN_PASSWORD) {
+          res.writeHead(401);
+          res.end('Unauthorized');
+          return;
+        }
+
+        if (typeof data.eventText === 'string') {
+          setEventText(data.eventText);
+        }
+        let count = await readCount();
+        if (data.resetCount) {
+          count = await resetCount();
+        }
+        const eventText = getEventText();
+
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ count, eventText }));
+      } catch (_err) {
+        res.writeHead(400);
+        res.end('Bad Request');
+      }
+    });
+    return;
+  }
+
   if (req.method === 'GET') {
     serveStatic(req, res);
     return;
@@ -111,7 +185,7 @@ const server = http.createServer((req, res) => {
 
 // Ensure data file exists for fallback
 if (!fs.existsSync(DATA_FILE)) {
-  writeCountFile(0);
+  writeDataFile({ count: 0, eventText: 'Event Text' });
 }
 
 server.listen(PORT, () => {
