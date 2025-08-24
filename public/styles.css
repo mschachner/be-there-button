@@ -54,4 +54,16 @@ body {
 .count { font-size: 18px; }
 .status { font-size: 16px; color: var(--muted); max-width: 560px; }
 
+.admin-link {
+  position: fixed;
+  bottom: 8px;
+  right: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+  opacity: 0.5;
+}
+
+.admin-link:hover { opacity: 0.8; }
+
 
