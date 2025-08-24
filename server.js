@@ -9,7 +9,22 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const REDIS_URL = process.env.REDIS_URL;
 const REDIS_KEY = process.env.REDIS_KEY || 'be-there:count';
 
-const redis = (REDIS_URL && RedisLib) ? new RedisLib(REDIS_URL, { lazyConnect: false }) : null;
+const redis = (REDIS_URL && RedisLib)
+  ? new RedisLib(REDIS_URL, {
+      lazyConnect: true,
+      maxRetriesPerRequest: 1,
+      retryStrategy: (times) => Math.min(times * 500, 5000),
+    })
+  : null;
+
+if (redis) {
+  redis.on('error', (err) => {
+    const message = (err && err.message) ? err.message : String(err);
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[redis] error:', message);
+    }
+  });
+}
 
 function readCountFile() {
   try {
