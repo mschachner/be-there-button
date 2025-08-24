@@ -10,8 +10,7 @@
 
   function updateCountText(n) {
     currentCount = n;
-    const people = n === 1 ? 'person' : 'people';
-    countEl.textContent = `${n} ${people} will be there.`;
+    countEl.textContent = `${n} people will be there.`;
   }
 
   function setStatusClicked(clicked) {
@@ -40,7 +39,11 @@
 
   async function init() {
     try {
-      const { count, eventText, clicked } = await fetchState();
+      let state = window.__INITIAL_STATE__;
+      if (!state) {
+        state = await fetchState();
+      }
+      const { count, eventText, clicked } = state;
       updateCountText(count);
       eventTextEl.textContent = eventText;
       setStatusClicked(clicked);
