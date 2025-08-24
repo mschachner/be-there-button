@@ -69,7 +69,13 @@
 
   buttonEl.addEventListener('click', async () => {
     if (alreadyClicked) {
-      statusEl.innerHTML = 'WARNING! You have now clicked the Be There Button multiple times. This is strictly prohibited. Please exit this page immediately. Under no circumstances should you click the Be There Button additional times.<br><br>If you would like to apologize for clicking the button multiple times, please submit the Official Cornell Math Department Repeated Be There Button Click Apology Form.';
+      const warningMessage = 'WARNING! You have now clicked the Be There Button multiple times. ' +
+        'This is strictly prohibited. Please exit this page immediately. ' +
+        'Under no circumstances should you click the Be There Button additional times.<br><br>' +
+        'If you would like to apologize for clicking the button multiple times, ' +
+        'please submit the <a href="https://docs.google.com/forms/d/e/1FAIpQLSeamo8gOigN_if6rcxP3minuFPTW-BS4uoJ5X8pmkncs_PSXQ/viewform?usp=header">Official Cornell Math Department Repeated Be There Button Click Apology Form</a>.';
+      
+      statusEl.innerHTML = warningMessage;
       return;
     }
     const prev = currentCount;
