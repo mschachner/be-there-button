@@ -12,6 +12,7 @@
   const adminCancelBtn = document.getElementById('admin-cancel');
 
   let currentCount = 0;
+  let alreadyClicked = false;
 
   function updateCountText(n) {
     currentCount = n;
@@ -20,13 +21,12 @@
   }
 
   function setStatusClicked(clicked) {
+    alreadyClicked = clicked;
     if (clicked) {
       statusEl.textContent = 'You have clicked the Be There Button. Please do not click the button again...';
-      buttonEl.setAttribute('disabled', 'true');
       buttonEl.style.filter = 'grayscale(0.2)';
     } else {
       statusEl.textContent = 'You have not clicked the Be There Button.';
-      buttonEl.removeAttribute('disabled');
       buttonEl.style.filter = '';
     }
   }
@@ -68,7 +68,10 @@
   }
 
   buttonEl.addEventListener('click', async () => {
-    if (buttonEl.hasAttribute('disabled')) return; // guard double-clicks
+    if (alreadyClicked) {
+      statusEl.innerHTML = 'WARNING! You have now clicked the Be There Button multiple times. This is strictly prohibited. Please exit this page immediately. Under no circumstances should you click the Be There Button additional times.<br><br>If you would like to apologize for clicking the button multiple times, please submit the Official Cornell Math Department Repeated Be There Button Click Apology Form.';
+      return;
+    }
     const prev = currentCount;
     setStatusClicked(true);
     updateCountText(prev + 1);
