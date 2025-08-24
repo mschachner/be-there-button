@@ -34,10 +34,12 @@ function readDataFile() {
     const parsed = JSON.parse(raw);
     return {
       count: typeof parsed.count === 'number' && parsed.count >= 0 ? parsed.count : 0,
-      eventText: typeof parsed.eventText === 'string' ? parsed.eventText : 'Event Text'
+      eventText: typeof parsed.eventText === 'string' ? parsed.eventText : 'Event Text',
+      eventId: typeof parsed.eventId === 'string' ? parsed.eventId : Date.now().toString()
     };
   } catch (_err) {
-    return { count: 0, eventText: 'Event Text' };
+    const id = Date.now().toString();
+    return { count: 0, eventText: 'Event Text', eventId: id };
   }
 }
 
@@ -83,13 +85,17 @@ async function resetCount() {
     } catch (_err) {}
   }
   const data = readDataFile();
-  const updated = { ...data, count: 0 };
+  const updated = { ...data, count: 0, eventId: Date.now().toString() };
   writeDataFile(updated);
   return 0;
 }
 
 function getEventText() {
   return readDataFile().eventText;
+}
+
+function getEventId() {
+  return readDataFile().eventId;
 }
 
 function setEventText(text) {
@@ -131,7 +137,8 @@ function serveStatic(req, res) {
 const server = http.createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/api/state') {
     const cookies = parseCookies(req);
-    const clicked = cookies[CLICK_COOKIE] === 'true';
+    const eventId = getEventId();
+    const clicked = cookies[CLICK_COOKIE] === eventId;
     readCount()
       .then((count) => {
         const eventText = getEventText();
@@ -158,14 +165,15 @@ const server = http.createServer((req, res) => {
 
   if (req.method === 'POST' && req.url === '/api/increment') {
     const cookies = parseCookies(req);
-    const alreadyClicked = cookies[CLICK_COOKIE] === 'true';
+    const eventId = getEventId();
+    const alreadyClicked = cookies[CLICK_COOKIE] === eventId;
     let body = '';
     req.on('data', chunk => (body += chunk));
     req.on('end', () => {
       const finish = (count, setCookie) => {
         const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
         if (setCookie) {
-          headers['Set-Cookie'] = `${CLICK_COOKIE}=true; Path=/; Max-Age=31536000`;
+          headers['Set-Cookie'] = `${CLICK_COOKIE}=${eventId}; Path=/; Max-Age=31536000`;
         }
         res.writeHead(200, headers);
         res.end(JSON.stringify({ count, clicked: true }));
@@ -227,7 +235,7 @@ const server = http.createServer((req, res) => {
 
 // Ensure data file exists for fallback
 if (!fs.existsSync(DATA_FILE)) {
-  writeDataFile({ count: 0, eventText: 'Event Text' });
+  writeDataFile({ count: 0, eventText: 'Event Text', eventId: Date.now().toString() });
 }
 
 server.listen(PORT, () => {
