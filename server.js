@@ -114,6 +114,16 @@ function parseCookies(req) {
   }, {});
 }
 
+function escapeHtml(str) {
+  return str.replace(/[&<>"']/g, c => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[c] || c));
+}
+
 function serveStatic(req, res) {
   let filePath = req.url === '/' ? path.join(PUBLIC_DIR, 'index.html') : path.join(PUBLIC_DIR, req.url);
   if (!filePath.startsWith(PUBLIC_DIR)) {
@@ -121,6 +131,32 @@ function serveStatic(req, res) {
     res.end('Forbidden');
     return;
   }
+
+  if (filePath === path.join(PUBLIC_DIR, 'index.html')) {
+    fs.readFile(filePath, 'utf8', (err, html) => {
+      if (err) {
+        res.writeHead(404);
+        res.end('Not Found');
+        return;
+      }
+      const data = readDataFile();
+      const cookies = parseCookies(req);
+      const clicked = cookies[CLICK_COOKIE] === data.eventId;
+      const statusText = clicked
+        ? 'You have clicked the Be There Button. Please do not click the button again...'
+        : 'You have not clicked the Be There Button.';
+      const stateScript = `<script>window.__INITIAL_STATE__=${JSON.stringify({ count: data.count, eventText: data.eventText, clicked })};</script>`;
+      const rendered = html
+        .replace('Event Text', escapeHtml(data.eventText))
+        .replace('0 people will be there.', `${data.count} people will be there.`)
+        .replace('You have not clicked the Be There Button.', statusText)
+        .replace('<script src="/script.js"></script>', `${stateScript}<script src="/script.js"></script>`);
+      res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
+      res.end(rendered);
+    });
+    return;
+  }
+
   fs.readFile(filePath, (err, data) => {
     if (err) {
       res.writeHead(404);
