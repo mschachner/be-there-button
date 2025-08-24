@@ -8,7 +8,7 @@ const DATA_FILE = path.join(__dirname, 'data.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const REDIS_URL = process.env.REDIS_URL;
 const REDIS_KEY = process.env.REDIS_KEY || 'be-there:count';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'badgers';
 const REDIS_TIMEOUT_MS = 500;
 
 const redis = (REDIS_URL && RedisLib)
