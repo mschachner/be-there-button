@@ -5,7 +5,6 @@
   const eventTextEl = document.getElementById('event-text');
   const adminLink = document.getElementById('admin-link');
 
-  const CLICK_COOKIE = 'be-there-clicked';
   let currentCount = 0;
 
   function updateCountText(n) {
@@ -89,7 +88,6 @@
       updateCountText(data.count ?? 0);
       eventTextEl.textContent = data.eventText ?? '';
       if (reset) {
-        document.cookie = `${CLICK_COOKIE}=; Max-Age=0; Path=/`;
         setStatusClicked(false);
       }
     } catch (_err) {

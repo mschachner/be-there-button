@@ -9,7 +9,6 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const REDIS_URL = process.env.REDIS_URL;
 const REDIS_KEY = process.env.REDIS_KEY || 'be-there:count';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
-const CLICK_COOKIE = 'be-there-clicked';
 
 const redis = (REDIS_URL && RedisLib)
   ? new RedisLib(REDIS_URL, {
@@ -35,11 +34,12 @@ function readDataFile() {
     return {
       count: typeof parsed.count === 'number' && parsed.count >= 0 ? parsed.count : 0,
       eventText: typeof parsed.eventText === 'string' ? parsed.eventText : 'Event Text',
-      eventId: typeof parsed.eventId === 'string' ? parsed.eventId : Date.now().toString()
+      eventId: typeof parsed.eventId === 'string' ? parsed.eventId : Date.now().toString(),
+      ips: Array.isArray(parsed.ips) ? parsed.ips.filter(ip => typeof ip === 'string') : []
     };
   } catch (_err) {
     const id = Date.now().toString();
-    return { count: 0, eventText: 'Event Text', eventId: id };
+    return { count: 0, eventText: 'Event Text', eventId: id, ips: [] };
   }
 }
 
@@ -60,24 +60,6 @@ async function readCount() {
   return readDataFile().count;
 }
 
-async function incrementCount() {
-  if (redis) {
-    try {
-      const newValue = await redis.incr(REDIS_KEY);
-      return newValue;
-    } catch (_err) {
-      const data = readDataFile();
-      const c = data.count + 1;
-      writeDataFile({ ...data, count: c });
-      return c;
-    }
-  }
-  const data = readDataFile();
-  const c = data.count + 1;
-  writeDataFile({ ...data, count: c });
-  return c;
-}
-
 async function resetCount() {
   if (redis) {
     try {
@@ -85,17 +67,13 @@ async function resetCount() {
     } catch (_err) {}
   }
   const data = readDataFile();
-  const updated = { ...data, count: 0, eventId: Date.now().toString() };
+  const updated = { ...data, count: 0, ips: [], eventId: Date.now().toString() };
   writeDataFile(updated);
   return 0;
 }
 
 function getEventText() {
   return readDataFile().eventText;
-}
-
-function getEventId() {
-  return readDataFile().eventId;
 }
 
 function setEventText(text) {
@@ -105,13 +83,32 @@ function setEventText(text) {
   return text;
 }
 
-function parseCookies(req) {
-  const header = req.headers.cookie || '';
-  return header.split(';').reduce((acc, pair) => {
-    const [k, v] = pair.trim().split('=');
-    if (k) acc[k] = decodeURIComponent(v || '');
-    return acc;
-  }, {});
+function getClientIp(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.length > 0) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.socket.remoteAddress || '';
+}
+
+function hasIp(ip) {
+  return readDataFile().ips.includes(ip);
+}
+
+async function addIp(ip) {
+  const data = readDataFile();
+  if (data.ips.includes(ip)) {
+    return data.count;
+  }
+  let count = data.count + 1;
+  if (redis) {
+    try {
+      count = await redis.incr(REDIS_KEY);
+    } catch (_err) {}
+  }
+  const updated = { ...data, count, ips: [...data.ips, ip] };
+  writeDataFile(updated);
+  return count;
 }
 
 function escapeHtml(str) {
@@ -140,8 +137,8 @@ function serveStatic(req, res) {
         return;
       }
       const data = readDataFile();
-      const cookies = parseCookies(req);
-      const clicked = cookies[CLICK_COOKIE] === data.eventId;
+      const ip = getClientIp(req);
+      const clicked = data.ips.includes(ip);
       const statusText = clicked
         ? 'You have clicked the Be There Button. Please do not click the button again...'
         : 'You have not clicked the Be There Button.';
@@ -172,9 +169,8 @@ function serveStatic(req, res) {
 
 const server = http.createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/api/state') {
-    const cookies = parseCookies(req);
-    const eventId = getEventId();
-    const clicked = cookies[CLICK_COOKIE] === eventId;
+    const ip = getClientIp(req);
+    const clicked = hasIp(ip);
     readCount()
       .then((count) => {
         const eventText = getEventText();
@@ -200,18 +196,12 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.method === 'POST' && req.url === '/api/increment') {
-    const cookies = parseCookies(req);
-    const eventId = getEventId();
-    const alreadyClicked = cookies[CLICK_COOKIE] === eventId;
+    const ip = getClientIp(req);
     let body = '';
     req.on('data', chunk => (body += chunk));
     req.on('end', () => {
-      const finish = (count, setCookie) => {
-        const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
-        if (setCookie) {
-          headers['Set-Cookie'] = `${CLICK_COOKIE}=${eventId}; Path=/; Max-Age=31536000`;
-        }
-        res.writeHead(200, headers);
+      const finish = (count) => {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
         res.end(JSON.stringify({ count, clicked: true }));
       };
 
@@ -220,11 +210,7 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ error: 'Failed to increment' }));
       };
 
-      if (alreadyClicked) {
-        readCount().then((count) => finish(count, false)).catch(handleError);
-      } else {
-        incrementCount().then((count) => finish(count, true)).catch(handleError);
-      }
+      addIp(ip).then((count) => finish(count)).catch(handleError);
     });
     return;
   }
@@ -271,7 +257,7 @@ const server = http.createServer((req, res) => {
 
 // Ensure data file exists for fallback
 if (!fs.existsSync(DATA_FILE)) {
-  writeDataFile({ count: 0, eventText: 'Event Text', eventId: Date.now().toString() });
+  writeDataFile({ count: 0, eventText: 'Event Text', eventId: Date.now().toString(), ips: [] });
 }
 
 server.listen(PORT, () => {
