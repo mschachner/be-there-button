@@ -4,12 +4,19 @@
   const buttonEl = document.getElementById('be-there');
   const eventTextEl = document.getElementById('event-text');
   const adminLink = document.getElementById('admin-link');
+  const adminDialog = document.getElementById('admin-dialog');
+  const adminForm = document.getElementById('admin-form');
+  const adminPasswordInput = document.getElementById('admin-password');
+  const adminEventInput = document.getElementById('admin-event-text');
+  const adminResetInput = document.getElementById('admin-reset');
+  const adminCancelBtn = document.getElementById('admin-cancel');
 
   let currentCount = 0;
 
   function updateCountText(n) {
     currentCount = n;
-    countEl.textContent = `${n} people will be there.`;
+    const label = n === 1 ? 'person' : 'people';
+    countEl.textContent = `${n} ${label} will be there.`;
   }
 
   function setStatusClicked(clicked) {
@@ -67,12 +74,24 @@
     }
   });
 
-  adminLink.addEventListener('click', async (e) => {
+  adminLink.addEventListener('click', (e) => {
     e.preventDefault();
-    const password = prompt('Enter admin password:');
+    adminPasswordInput.value = '';
+    adminEventInput.value = eventTextEl.textContent;
+    adminResetInput.checked = false;
+    adminDialog.showModal();
+  });
+
+  adminCancelBtn.addEventListener('click', () => {
+    adminDialog.close();
+  });
+
+  adminForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const password = adminPasswordInput.value;
     if (!password) return;
-    const newText = prompt('Event Text:', eventTextEl.textContent);
-    const reset = confirm('Reset count?');
+    const newText = adminEventInput.value;
+    const reset = adminResetInput.checked;
     try {
       const res = await fetch('/api/admin', {
         method: 'POST',
@@ -90,6 +109,7 @@
       if (reset) {
         setStatusClicked(false);
       }
+      adminDialog.close();
     } catch (_err) {
       alert('Admin action failed');
     }

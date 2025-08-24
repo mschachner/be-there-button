@@ -145,7 +145,7 @@ function serveStatic(req, res) {
       const stateScript = `<script>window.__INITIAL_STATE__=${JSON.stringify({ count: data.count, eventText: data.eventText, clicked })};</script>`;
       const rendered = html
         .replace('Event Text', escapeHtml(data.eventText))
-        .replace('0 people will be there.', `${data.count} people will be there.`)
+        .replace('0 people will be there.', `${data.count} ${data.count === 1 ? 'person' : 'people'} will be there.`)
         .replace('You have not clicked the Be There Button.', statusText)
         .replace('<script src="/script.js"></script>', `${stateScript}<script src="/script.js"></script>`);
       res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
