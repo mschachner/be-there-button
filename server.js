@@ -9,6 +9,7 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const REDIS_URL = process.env.REDIS_URL;
 const REDIS_KEY = process.env.REDIS_KEY || 'be-there:count';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
+const REDIS_TIMEOUT_MS = 500;
 
 const redis = (REDIS_URL && RedisLib)
   ? new RedisLib(REDIS_URL, {
@@ -24,6 +25,16 @@ if (redis) {
     if (process.env.NODE_ENV !== 'production') {
       console.warn('[redis] error:', message);
     }
+  });
+}
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms);
+    promise.then(
+      (val) => { clearTimeout(timer); resolve(val); },
+      (err) => { clearTimeout(timer); reject(err); }
+    );
   });
 }
 
@@ -50,7 +61,7 @@ function writeDataFile(data) {
 async function readCount() {
   if (redis) {
     try {
-      const value = await redis.get(REDIS_KEY);
+      const value = await withTimeout(redis.get(REDIS_KEY), REDIS_TIMEOUT_MS);
       const asNumber = Number.parseInt(value ?? '0', 10);
       return Number.isFinite(asNumber) ? asNumber : 0;
     } catch (_err) {
@@ -63,7 +74,7 @@ async function readCount() {
 async function resetCount() {
   if (redis) {
     try {
-      await redis.set(REDIS_KEY, '0');
+      await withTimeout(redis.set(REDIS_KEY, '0'), REDIS_TIMEOUT_MS);
     } catch (_err) {}
   }
   const data = readDataFile();
@@ -103,7 +114,7 @@ async function addIp(ip) {
   let count = data.count + 1;
   if (redis) {
     try {
-      count = await redis.incr(REDIS_KEY);
+      count = await withTimeout(redis.incr(REDIS_KEY), REDIS_TIMEOUT_MS);
     } catch (_err) {}
   }
   const updated = { ...data, count, ips: [...data.ips, ip] };

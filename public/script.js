@@ -110,7 +110,9 @@
         setStatusClicked(false);
       }
       adminDialog.close();
-    } catch (_err) {
+    } catch (err) {
+      // Ignore aborted requests (e.g., page refresh) but surface other errors
+      if (err && err.name === 'AbortError') return;
       alert('Admin action failed');
     }
   });
