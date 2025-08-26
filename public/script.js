@@ -83,10 +83,10 @@
     const prev = currentCount;
     setStatusClicked(true);
     updateCountText(prev + 1);
+    runConfetti();
     try {
       const { count } = await incrementCount();
       updateCountText(count);
-      runConfetti();
     } catch (err) {
       statusEl.textContent = 'Error submitting. Please try again.';
       setStatusClicked(false);
