@@ -33,7 +33,11 @@ body {
   letter-spacing: 0.4px;
 }
 
-.event-text { color: var(--muted); font-size: 18px; }
+.event-text {
+  color: var(--muted);
+  font-size: 18px;
+  white-space: pre-line;
+}
 
 .be-there {
   width: 160px;
@@ -103,10 +107,16 @@ body {
 }
 
 .admin-dialog input[type="text"],
-.admin-dialog input[type="password"] {
+.admin-dialog input[type="password"],
+.admin-dialog textarea {
   padding: 6px;
   border: 1px solid var(--muted);
   border-radius: 4px;
+}
+
+.admin-dialog textarea {
+  min-height: 80px;
+  resize: vertical;
 }
 
 .admin-dialog menu {
