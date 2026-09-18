@@ -1,13 +1,17 @@
 {
   "name": "be-there-button",
-  "version": "1.0.0",
-  "description": "Single-page app with a global 'Be There' button and lightweight backend",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Official Math Department Be There Button: one page, one button, one shared count.",
   "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
+  "engines": {
+    "node": ">=20"
   },
-  "keywords": [],
-  "author": "",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "ADMIN_PASSWORD=dev node server.js",
+    "test": "NODE_ENV=test node --test"
+  },
   "license": "MIT",
   "dependencies": {
     "ioredis": "^5.7.0"

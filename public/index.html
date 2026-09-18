@@ -2,38 +2,82 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#f5eee2">
     <title>Official Math Department Be There Button</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
-    <main class="container">
-      <h1 class="title">Official Math Department Be There Button</h1>
-      <div id="event-text" class="event-text">Event Text</div>
-      <button id="be-there" class="be-there" aria-label="Be There"></button>
-      <div id="count" class="count">0 people will be there.</div>
-      <div id="status" class="status">You have not clicked the Be There Button.</div>
+    <main class="page">
+      <header class="masthead">
+        <h1 class="title">
+          <span class="title-eyebrow">Official Math Department</span>
+          <span class="title-main">Be There Button</span>
+        </h1>
+        <div class="ornament" aria-hidden="true">
+          <span class="ornament-rule"></span>
+          <span class="ornament-star">✦</span>
+          <span class="ornament-rule"></span>
+        </div>
+      </header>
+
+      <section class="notice" aria-label="Event">
+        <p id="event-text" class="event-text">Event Text</p>
+      </section>
+
+      <section class="console" aria-label="Be There Button">
+        <div class="plate">
+          <span class="screw screw-tl" aria-hidden="true"></span>
+          <span class="screw screw-tr" aria-hidden="true"></span>
+          <span class="screw screw-bl" aria-hidden="true"></span>
+          <span class="screw screw-br" aria-hidden="true"></span>
+          <div class="well">
+            <button id="be-there" class="be-there" type="button" aria-label="Be There">
+              <span class="dome" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="tally">
+          <div id="odometer" class="odometer" aria-hidden="true"></div>
+          <p id="count" class="count" aria-live="polite">0 people will be there.</p>
+        </div>
+      </section>
+
+      <div id="status" class="status" role="status" aria-live="polite">Loading current attendance…</div>
     </main>
+
     <a id="admin-link" class="admin-link" href="#">admin</a>
+
     <dialog id="admin-dialog" class="admin-dialog">
-      <form id="admin-form" method="dialog">
-        <label> Password
-          <input type="password" id="admin-password" required />
+      <form id="admin-form" method="dialog" novalidate>
+        <h2 class="admin-title">Event administration</h2>
+        <label class="field">
+          <span>Password</span>
+          <input type="password" id="admin-password" autocomplete="current-password" required>
         </label>
-        <label> Event Text
-          <textarea id="admin-event-text" rows="3"></textarea>
+        <label class="field">
+          <span>Event Text</span>
+          <textarea id="admin-event-text" rows="4" maxlength="500"></textarea>
         </label>
-        <label class="reset">
-          <input type="checkbox" id="admin-reset" /> Reset count
+        <label class="field">
+          <span>Attendance count</span>
+          <input type="number" id="admin-count" min="0" step="1" placeholder="Leave unchanged">
         </label>
-        <menu>
-          <button type="button" id="admin-cancel">Cancel</button>
-          <button type="submit" id="admin-submit">Save</button>
+        <label class="field field-check">
+          <input type="checkbox" id="admin-reset">
+          <span>Reset count</span>
+        </label>
+        <p id="admin-error" class="admin-error" role="alert" hidden></p>
+        <menu class="admin-actions">
+          <button type="button" id="admin-cancel" class="btn btn-quiet">Cancel</button>
+          <button type="submit" id="admin-submit" class="btn btn-primary">Save</button>
         </menu>
       </form>
     </dialog>
-    <script src="/script.js"></script>
+
+    <script type="module" src="/js/main.js"></script>
   </body>
-  </html>
-
-
+</html>
