@@ -4,7 +4,7 @@
    --------------------------------------------------------------------------- */
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   --paper: #f5eee2;
   --paper-deep: #e9dfcc;
@@ -28,20 +28,6 @@
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
   --sin: 0; /* grows with each forbidden click */
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #221c17;
-    --paper-deep: #1a1512;
-    --paper-card: #2b241e;
-    --ink: #efe5d3;
-    --ink-soft: #b8a892;
-    --ink-faint: #7e7060;
-    --rule: #55483a;
-    --metal-dark: #16120f;
-    --focus: #7fb0ea;
-  }
 }
 
 *, *::before, *::after { box-sizing: border-box; }

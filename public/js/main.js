@@ -67,13 +67,20 @@ function setStatus(message, variant = '') {
 
 function renderClicked(clicked) {
   state.clicked = clicked;
+  state.extraClicks = 0;
   els.button.classList.toggle('clicked', clicked);
-  if (!clicked) {
-    els.button.classList.remove('evil');
-    state.extraClicks = 0;
-    document.documentElement.style.setProperty('--sin', '0');
-  }
+  els.button.classList.remove('evil');
+  document.documentElement.style.setProperty('--sin', '0');
   setStatus(clicked ? TEXT.clicked : TEXT.notClicked, clicked ? 'clicked' : '');
+}
+
+function renderExtraClicks(extraClicks) {
+  state.extraClicks = extraClicks;
+  if (extraClicks <= 0) return;
+  els.button.classList.remove('clicked');
+  els.button.classList.add('evil');
+  document.documentElement.style.setProperty('--sin', String(Math.min(extraClicks, MAX_SIN) / MAX_SIN));
+  renderWarning();
 }
 
 function renderWarning() {
@@ -121,13 +128,16 @@ async function handleFirstClick() {
   }
 }
 
-function handleForbiddenClick() {
-  state.extraClicks += 1;
-  els.button.classList.remove('clicked');
-  els.button.classList.add('evil');
-  document.documentElement.style.setProperty('--sin', String(Math.min(state.extraClicks, MAX_SIN) / MAX_SIN));
+async function handleForbiddenClick() {
+  renderExtraClicks(state.extraClicks + 1);
   shakePlate();
-  renderWarning();
+  try {
+    const { count, extraClicks } = await increment(); // the server keeps the tally of offenses
+    renderCount(count);
+    renderExtraClicks(Math.max(extraClicks, state.extraClicks));
+  } catch {
+    // The offense stays recorded locally either way.
+  }
 }
 
 els.button.addEventListener('click', () => {
@@ -148,10 +158,11 @@ setupAdmin({
 
 async function init() {
   try {
-    const { count, eventText, clicked } = await getState();
+    const { count, eventText, clicked, extraClicks } = await getState();
     renderCount(count);
     renderEventText(eventText);
     renderClicked(clicked);
+    renderExtraClicks(extraClicks || 0);
   } catch {
     renderCount(0);
     setStatus(TEXT.loadFailed, 'error');

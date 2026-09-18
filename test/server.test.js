@@ -78,19 +78,27 @@ test('rejects oversized request bodies', async t => {
 function fakeRedis() {
   const strings = new Map();
   const sets = new Map();
+  const hashes = new Map();
   const client = {
     async get(key) { return strings.has(key) ? strings.get(key) : null; },
     async set(key, value) { strings.set(key, String(value)); return 'OK'; },
-    async del(key) { strings.delete(key); sets.delete(key); return 1; },
+    async del(key) { strings.delete(key); sets.delete(key); hashes.delete(key); return 1; },
     async sismember(key, member) { return sets.get(key)?.has(member) ? 1 : 0; },
-    async eval(_script, _numKeys, countKey, ipsKey, ip) {
+    async hget(key, field) { return hashes.get(key)?.get(field) ?? null; },
+    async hincrby(key, field, by) {
+      if (!hashes.has(key)) hashes.set(key, new Map());
+      const next = Number(hashes.get(key).get(field) || 0) + by;
+      hashes.get(key).set(field, String(next));
+      return next;
+    },
+    async eval(_script, _numKeys, countKey, ipsKey, extraKey, ip) {
       if (!sets.has(ipsKey)) sets.set(ipsKey, new Set());
       const members = sets.get(ipsKey);
-      if (members.has(ip)) return Number(strings.get(countKey) || 0);
+      if (members.has(ip)) return [Number(strings.get(countKey) || 0), await client.hincrby(extraKey, ip, 1)];
       members.add(ip);
       const next = Number(strings.get(countKey) || 0) + 1;
       strings.set(countKey, String(next));
-      return next;
+      return [next, 0];
     },
     multi() {
       const queue = [];
@@ -129,5 +137,21 @@ test('keeps count and event text in redis when it is available', async t => {
   await new Promise(resolve => fresh.server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => fresh.server.close(resolve)));
   const state = await fetch(`http://127.0.0.1:${fresh.server.address().port}/api/state`).then(r => r.json());
-  assert.deepEqual(state, { count: 1, eventText: 'Malott 103, 11am', clicked: true });
+  assert.deepEqual(state, { count: 1, eventText: 'Malott 103, 11am', clicked: true, extraClicks: 0 });
+});
+
+test('remembers forbidden repeat clicks per IP and clears them on reset', async t => {
+  const { origin } = await fixture(t);
+  const first = await fetch(`${origin}/api/increment`, { method: 'POST' }).then(r => r.json());
+  assert.deepEqual(first, { count: 1, clicked: true, extraClicks: 0 });
+  await fetch(`${origin}/api/increment`, { method: 'POST' });
+  const third = await fetch(`${origin}/api/increment`, { method: 'POST' }).then(r => r.json());
+  assert.deepEqual(third, { count: 1, clicked: true, extraClicks: 2 });
+  assert.equal((await fetch(`${origin}/api/state`).then(r => r.json())).extraClicks, 2);
+
+  await fetch(`${origin}/api/admin`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ password: 'test-secret', resetCount: true })
+  });
+  assert.deepEqual(await fetch(`${origin}/api/state`).then(r => r.json()), { count: 0, eventText: 'Event Text', clicked: false, extraClicks: 0 });
 });

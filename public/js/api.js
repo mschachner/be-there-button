@@ -19,7 +19,7 @@ export function getState() {
   return request('/api/state');
 }
 
-/** @returns {Promise<{count: number, clicked: boolean}>} */
+/** @returns {Promise<{count: number, clicked: boolean, extraClicks: number}>} */
 export function increment() {
   return request('/api/increment', { method: 'POST' });
 }

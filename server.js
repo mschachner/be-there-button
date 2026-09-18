@@ -19,6 +19,7 @@ function createApp(options = {}) {
   const redisKey = process.env.REDIS_KEY || 'be-there:count';
   const redisIpsKey = `${redisKey}:ips`;
   const redisTextKey = `${redisKey}:text`;
+  const redisExtraKey = `${redisKey}:extra`; // hash: ip -> number of forbidden repeat clicks
   const adminPassword = options.adminPassword || process.env.ADMIN_PASSWORD || crypto.randomBytes(12).toString('base64url');
   const trustProxy = options.trustProxy ?? process.env.TRUST_PROXY === 'true';
   const loginFailures = new Map();
@@ -36,40 +37,61 @@ function createApp(options = {}) {
     return operation;
   }
 
+  function stateFromFile(fileData, ip) {
+    return {
+      count: fileData.count,
+      eventText: fileData.eventText,
+      clicked: fileData.ips.includes(ip),
+      extraClicks: fileData.extraClicks[ip] || 0
+    };
+  }
+
   async function getState(ip) {
     const fileData = readDataFile(dataFile);
-    if (!redis) return { count: fileData.count, eventText: fileData.eventText, clicked: fileData.ips.includes(ip) };
+    if (!redis) return stateFromFile(fileData, ip);
     try {
-      const [countValue, clickedValue, textValue] = await withTimeout(
-        Promise.all([redis.get(redisKey), redis.sismember(redisIpsKey, ip), redis.get(redisTextKey)]),
+      const [countValue, clickedValue, textValue, extraValue] = await withTimeout(
+        Promise.all([redis.get(redisKey), redis.sismember(redisIpsKey, ip), redis.get(redisTextKey), redis.hget(redisExtraKey, ip)]),
         REDIS_TIMEOUT_MS
       );
       const parsed = Number.parseInt(countValue ?? String(fileData.count), 10);
       return {
         count: Number.isFinite(parsed) ? parsed : fileData.count,
         eventText: typeof textValue === 'string' ? textValue.slice(0, MAX_EVENT_TEXT) : fileData.eventText,
-        clicked: Boolean(clickedValue)
+        clicked: Boolean(clickedValue),
+        extraClicks: Number.parseInt(extraValue ?? '0', 10) || 0
       };
     } catch (err) {
       logError('Redis state read failed; using file fallback', err);
-      return { count: fileData.count, eventText: fileData.eventText, clicked: fileData.ips.includes(ip) };
+      return stateFromFile(fileData, ip);
     }
   }
 
-  async function addIp(ip) {
+  // First click from an IP increments the count; every later click is recorded against that IP instead.
+  const INCREMENT_SCRIPT =
+    "if redis.call('SADD', KEYS[2], ARGV[1]) == 1 then return {redis.call('INCR', KEYS[1]), 0} end " +
+    "return {tonumber(redis.call('GET', KEYS[1]) or '0'), redis.call('HINCRBY', KEYS[3], ARGV[1], 1)}";
+
+  function recordClickInFile(data, ip) {
+    if (!data.ips.includes(ip)) return { ...data, count: data.count + 1, ips: [...data.ips, ip] };
+    return { ...data, extraClicks: { ...data.extraClicks, [ip]: (data.extraClicks[ip] || 0) + 1 } };
+  }
+
+  async function recordClick(ip) {
     if (redis) {
       try {
-        const count = await withTimeout(redis.eval(
-          "if redis.call('SADD', KEYS[2], ARGV[1]) == 1 then return redis.call('INCR', KEYS[1]) else return tonumber(redis.call('GET', KEYS[1]) or '0') end",
-          2, redisKey, redisIpsKey, ip
-        ), REDIS_TIMEOUT_MS);
-        await mutateFile(data => ({ ...data, count: Number(count), ips: data.ips.includes(ip) ? data.ips : [...data.ips, ip] }));
-        return Number(count);
+        const [count, extraClicks] = await withTimeout(
+          redis.eval(INCREMENT_SCRIPT, 3, redisKey, redisIpsKey, redisExtraKey, ip),
+          REDIS_TIMEOUT_MS
+        );
+        await mutateFile(data => ({ ...recordClickInFile(data, ip), count: Number(count) }));
+        return { count: Number(count), extraClicks: Number(extraClicks) };
       } catch (err) {
         logError('Redis increment failed; using file fallback', err);
       }
     }
-    return (await mutateFile(data => data.ips.includes(ip) ? data : ({ ...data, count: data.count + 1, ips: [...data.ips, ip] }))).count;
+    const data = await mutateFile(current => recordClickInFile(current, ip));
+    return { count: data.count, extraClicks: data.extraClicks[ip] || 0 };
   }
 
   async function updateAdminState(eventText, requestedCount) {
@@ -78,7 +100,7 @@ function createApp(options = {}) {
     if (redis && (countChanged || textChanged)) {
       try {
         const batch = redis.multi();
-        if (countChanged) batch.set(redisKey, String(requestedCount)).del(redisIpsKey);
+        if (countChanged) batch.set(redisKey, String(requestedCount)).del(redisIpsKey).del(redisExtraKey);
         if (textChanged) batch.set(redisTextKey, eventText);
         await withTimeout(batch.exec(), REDIS_TIMEOUT_MS);
       } catch (err) {
@@ -89,7 +111,7 @@ function createApp(options = {}) {
     await mutateFile(data => ({
       ...data,
       eventText: textChanged ? eventText : data.eventText,
-      ...(countChanged ? { count: requestedCount, ips: [], eventId: Date.now().toString() } : {})
+      ...(countChanged ? { count: requestedCount, ips: [], extraClicks: {}, eventId: Date.now().toString() } : {})
     }));
     const state = await getState('');
     return { count: state.count, eventText: state.eventText };
@@ -110,8 +132,8 @@ function createApp(options = {}) {
       }
       if (req.method === 'POST' && requestUrl.pathname === '/api/increment') {
         await readBody(req);
-        const count = await addIp(getClientIp(req, trustProxy));
-        return sendJson(res, 200, { count, clicked: true });
+        const { count, extraClicks } = await recordClick(getClientIp(req, trustProxy));
+        return sendJson(res, 200, { count, clicked: true, extraClicks });
       }
       if (req.method === 'POST' && requestUrl.pathname === '/api/admin') {
         const ip = getClientIp(req, trustProxy);
@@ -154,7 +176,14 @@ function createRedisClient() {
   return client;
 }
 
-function defaultData() { return { count: 0, eventText: 'Event Text', eventId: Date.now().toString(), ips: [] }; }
+function defaultData() { return { count: 0, eventText: 'Event Text', eventId: Date.now().toString(), ips: [], extraClicks: {} }; }
+
+function normalizeExtraClicks(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(([ip, n]) => typeof ip === 'string' && ip.length <= 64 && Number.isSafeInteger(n) && n > 0)
+  );
+}
 
 function readDataFile(dataFile) {
   try {
@@ -163,7 +192,8 @@ function readDataFile(dataFile) {
       count: Number.isSafeInteger(parsed.count) && parsed.count >= 0 ? parsed.count : 0,
       eventText: typeof parsed.eventText === 'string' ? parsed.eventText.slice(0, MAX_EVENT_TEXT) : 'Event Text',
       eventId: typeof parsed.eventId === 'string' ? parsed.eventId : Date.now().toString(),
-      ips: Array.isArray(parsed.ips) ? [...new Set(parsed.ips.filter(ip => typeof ip === 'string' && ip.length <= 64))] : []
+      ips: Array.isArray(parsed.ips) ? [...new Set(parsed.ips.filter(ip => typeof ip === 'string' && ip.length <= 64))] : [],
+      extraClicks: normalizeExtraClicks(parsed.extraClicks)
     };
   } catch (err) {
     logError('Data file could not be read', err);
